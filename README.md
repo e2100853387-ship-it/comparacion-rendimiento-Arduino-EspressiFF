@@ -1,2 +1,2 @@
-# comparacion-rendimiento-Arduino-EspressiFF
-comparacin entre el redimiento de dos software , arduino y espressiff usando dos esp32- 30 pines 
+# BANCO DE PRUEBAS DE TEMPERATUR
+comparaci0n entre el redimiento. arduino y espressiff
