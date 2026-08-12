@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Incubadoras — ESP-IDF vs Arduino</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;background:#f5f5f5;color:#1a1a1a;padding:20px}
+  h1{font-size:22px;font-weight:600;margin-bottom:4px}
+  .sub{font-size:13px;color:#666;margin-bottom:16px}
+  .url-row{display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap}
+  .url-input{flex:1;min-width:200px;padding:8px 12px;border-radius:8px;border:1px solid #ccc;font-size:13px;background:#fff}
+  .load-btn{padding:8px 18px;border-radius:8px;border:1px solid #999;background:#fff;font-size:13px;cursor:pointer;font-weight:500;white-space:nowrap}
+  .load-btn:hover{background:#eee}
+  .tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid #ddd;padding-bottom:0}
+  .tab{padding:8px 18px;border-radius:8px 8px 0 0;font-size:13px;cursor:pointer;border:1px solid transparent;background:transparent;color:#666;border-bottom:none}
+  .tab.active{background:#fff;border-color:#ddd;border-bottom-color:#fff;color:#1a1a1a;font-weight:600;margin-bottom:-1px}
+  .section{display:none;background:#fff;border:1px solid #ddd;border-radius:0 8px 8px 8px;padding:16px}
+  .section.visible{display:block}
+  .kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
+  .kpi{background:#f9f9f9;border-radius:8px;padding:12px 14px;border:1px solid #eee}
+  .kpi-label{font-size:12px;color:#666;margin-bottom:4px}
+  .kpi-val{font-size:26px;font-weight:600}
+  .kpi-sub{font-size:11px;color:#999;margin-top:2px}
+  .kpi.esp .kpi-val{color:#2a78d6}
+  .kpi.ard .kpi-val{color:#d95926}
+  .status-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+  .status-card{background:#f9f9f9;border-radius:8px;padding:12px;border:1px solid #eee}
+  .status-header{font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  .status-line{display:flex;justify-content:space-between;font-size:12px;color:#555;padding:3px 0;border-bottom:1px solid #eee}
+  .status-line:last-child{border-bottom:none}
+  .badge{padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+  .badge.esp{background:#dbeafe;color:#1e40af}
+  .badge.ard{background:#ffedd5;color:#9a3412}
+  .pill{padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600}
+  .pill.on{background:#dcfce7;color:#166534}
+  .pill.off{background:#f3f4f6;color:#6b7280}
+  .pill.heat{background:#fee2e2;color:#991b1b}
+  .card{background:#f9f9f9;border:1px solid #eee;border-radius:8px;padding:14px;margin-bottom:14px}
+  .card-title{font-size:13px;font-weight:600;color:#555;margin-bottom:10px}
+  .legend{display:flex;gap:16px;font-size:12px;color:#666;margin-bottom:8px}
+  .legend span{display:flex;align-items:center;gap:5px}
+  .dot{width:10px;height:10px;border-radius:2px;display:inline-block}
+  .chart-wrap{position:relative;width:100%}
+  .metric-table{width:100%;border-collapse:collapse;font-size:13px}
+  .metric-table th{text-align:left;color:#666;font-weight:600;padding:7px 8px;border-bottom:1px solid #ddd;background:#f0f0f0}
+  .metric-table td{padding:7px 8px;border-bottom:1px solid #eee;color:#1a1a1a}
+  .metric-table tr:last-child td{border-bottom:none}
+  .better{color:#166534;font-weight:600}
+  .empty{color:#999;font-size:13px;padding:20px;text-align:center}
+  .setpoint-row{display:flex;align-items:center;gap:10px;padding:8px 0;flex-wrap:wrap}
+  .sp-label{font-size:13px;color:#555}
+  .sp-input{width:80px;padding:7px 10px;border-radius:8px;border:1px solid #ccc;font-size:16px;font-weight:600;text-align:center}
+  .calc-btn{padding:7px 16px;border-radius:8px;border:1px solid #999;background:#fff;font-size:13px;cursor:pointer;font-weight:500}
+  .calc-btn:hover{background:#eee}
+  select{padding:7px 10px;border-radius:8px;border:1px solid #ccc;background:#fff;font-size:13px}
+  .auto-status{font-size:12px;color:#999}
+  .ts{font-size:11px;color:#999}
+  @media(max-width:600px){
+    .status-row{grid-template-columns:1fr}
+    .kpi-row{grid-template-columns:1fr 1fr}
+  }
+</style>
+</head>
+<body>
+
+<h1>🥚 Incubadoras — ESP-IDF vs Arduino IDE</h1>
+<p class="sub">Dashboard comparativo · datos desde Google Sheets en tiempo real</p>
+
+<div class="url-row">
+  <input class="url-input" id="sheetId"
+    placeholder="ID del Google Spreadsheet"
+    value="17ZBqAzHQeJwta7gS_aeKgkvN9CCGJJUnnsRRe5uvtgM">
+  <button class="load-btn" id="loadBtn">🔄 Cargar datos</button>
+</div>
+
+<div class="tabs">
+  <button class="tab active" data-tab="live">📡 En vivo</button>
+  <button class="tab" data-tab="charts">📈 Gráficas</button>
+  <button class="tab" data-tab="compare">⚖️ Comparativo</button>
+  <button class="tab" data-tab="control">⚙️ Control</button>
+</div>
+
+<!-- EN VIVO -->
+<div id="tab-live" class="section visible">
+  <div class="kpi-row">
+    <div class="kpi esp"><div class="kpi-label">Temp ESP-IDF</div><div class="kpi-val" id="k-temp-esp">—</div><div class="kpi-sub">°C filtrada</div></div>
+    <div class="kpi ard"><div class="kpi-label">Temp Arduino</div><div class="kpi-val" id="k-temp-ard">—</div><div class="kpi-sub">°C filtrada</div></div>
+    <div class="kpi esp"><div class="kpi-label">Setpoint ESP-IDF</div><div class="kpi-val" id="k-sp-esp">—</div><div class="kpi-sub">°C objetivo</div></div>
+    <div class="kpi ard"><div class="kpi-label">Setpoint Arduino</div><div class="kpi-val" id="k-sp-ard">—</div><div class="kpi-sub">°C objetivo</div></div>
+  </div>
+  <div class="status-row">
+    <div class="status-card">
+      <div class="status-header"><span class="badge esp">ESP-IDF</span> Estado actual</div>
+      <div class="status-line"><span>Calefacción</span><span class="pill" id="s-heat-esp">—</span></div>
+      <div class="status-line"><span>Ventilador</span><span class="pill" id="s-fan-esp">—</span></div>
+      <div class="status-line"><span>Dimmer nivel</span><span id="s-dim-esp">—</span></div>
+      <div class="status-line"><span>Error (T−SP)</span><span id="s-err-esp">—</span></div>
+      <div class="status-line"><span>Última lectura</span><span class="ts" id="s-ts-esp">—</span></div>
+    </div>
+    <div class="status-card">
+      <div class="status-header"><span class="badge ard">Arduino</span> Estado actual</div>
+      <div class="status-line"><span>Calefacción</span><span class="pill" id="s-heat-ard">—</span></div>
+      <div class="status-line"><span>Ventilador</span><span class="pill" id="s-fan-ard">—</span></div>
+      <div class="status-line"><span>Control</span><span id="s-dim-ard">—</span></div>
+      <div class="status-line"><span>Error (T−SP)</span><span id="s-err-ard">—</span></div>
+      <div class="status-line"><span>Última lectura</span><span class="ts" id="s-ts-ard">—</span></div>
+    </div>
+  </div>
+  <p id="live-empty" class="empty">Pulsa "Cargar datos" para ver información en tiempo real.<br>
+  Asegúrate de que tu Google Sheet esté compartida como "cualquier persona con el enlace puede ver".</p>
+</div>
+
+<!-- GRÁFICAS -->
+<div id="tab-charts" class="section">
+  <div class="card">
+    <div class="card-title">Temperatura en el tiempo (últimas 60 lecturas)</div>
+    <div class="legend">
+      <span><span class="dot" style="background:#2a78d6"></span>ESP-IDF</span>
+      <span><span class="dot" style="background:#d95926"></span>Arduino</span>
+    </div>
+    <div class="chart-wrap" style="height:240px">
+      <canvas id="chartTemp"></canvas>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Ventilador / Calefacción en el tiempo</div>
+    <div class="legend">
+      <span><span class="dot" style="background:#2a78d6"></span>Fan ESP-IDF (%)</span>
+      <span><span class="dot" style="background:#d95926"></span>Fan Arduino (%)</span>
+    </div>
+    <div class="chart-wrap" style="height:180px">
+      <canvas id="chartFan"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- COMPARATIVO -->
+<div id="tab-compare" class="section">
+  <div class="card">
+    <div class="card-title">Métricas calculadas con datos cargados</div>
+    <table class="metric-table">
+      <thead><tr>
+        <th>Métrica</th>
+        <th><span class="badge esp">ESP-IDF</span></th>
+        <th><span class="badge ard">Arduino</span></th>
+        <th>Mejor</th>
+      </tr></thead>
+      <tbody id="metricsBody">
+        <tr><td colspan="4" class="empty">Carga datos primero</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <div class="card-title">Telemetría del sistema (última fila ESTADO)</div>
+    <table class="metric-table">
+      <thead><tr>
+        <th>Parámetro</th>
+        <th><span class="badge esp">ESP-IDF</span></th>
+        <th><span class="badge ard">Arduino</span></th>
+      </tr></thead>
+      <tbody id="telBody">
+        <tr><td colspan="3" class="empty">Sin datos aún</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- CONTROL -->
+<div id="tab-control" class="section">
+  <div class="card">
+    <div class="card-title">Setpoint de referencia para métricas</div>
+    <p style="font-size:13px;color:#666;margin-bottom:10px">
+      Ingresa el setpoint que usaste en la maqueta para calcular el MAE y el error correctamente.
+    </p>
+    <div class="setpoint-row">
+      <span class="sp-label">Setpoint (°C)</span>
+      <input class="sp-input" type="number" id="spRef" value="37" min="20" max="45" step="0.5">
+      <button class="calc-btn" id="calcBtn">Recalcular métricas</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Auto-actualización</div>
+    <div class="setpoint-row">
+      <span class="sp-label">Intervalo</span>
+      <select id="autoInt">
+        <option value="0">Manual</option>
+        <option value="10000" selected>Cada 10 s</option>
+        <option value="30000">Cada 30 s</option>
+        <option value="60000">Cada 1 min</option>
+      </select>
+      <span class="auto-status" id="autoStatus">Auto: activo (10 s)</span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Total de filas cargadas</div>
+    <div class="setpoint-row">
+      <span class="sp-label">ESP-IDF — DATOS:</span>
+      <strong id="count-esp-d">—</strong>
+      <span class="sp-label">| ESTADO:</span>
+      <strong id="count-esp-e">—</strong>
+    </div>
+    <div class="setpoint-row">
+      <span class="sp-label">Arduino — DATOS:</span>
+      <strong id="count-ard-d">—</strong>
+      <span class="sp-label">| ESTADO:</span>
+      <strong id="count-ard-e">—</strong>
+    </div>
+  </div>
+</div>
+
+<script>
+let espDatos=[],ardDatos=[],espEstado=[],ardEstado=[];
+let chartTemp=null,chartFan=null,autoTimer=null;
+const $=id=>document.getElementById(id);
+
+document.querySelectorAll('.tab').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(s=>s.classList.remove('visible'));
+    btn.classList.add('active');
+    $('tab-'+btn.dataset.tab).classList.add('visible');
+  });
+});
+
+function csvToRows(text){
+  return text.trim().split('\n').slice(1).map(r=>{
+    const cols=[];let cur='',inQ=false;
+    for(const c of r){
+      if(c==='"'){inQ=!inQ}
+      else if(c===','&&!inQ){cols.push(cur.trim());cur=''}
+      else{cur+=c}
+    }
+    cols.push(cur.trim());
+    return cols;
+  }).filter(r=>r.length>1&&r[0]);
+}
+
+async function fetchTab(sid,tab){
+  const url=`https://docs.google.com/spreadsheets/d/${sid}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`;
+  try{
+    const r=await fetch(url);
+    if(!r.ok)return[];
+    return csvToRows(await r.text());
+  }catch(e){return[];}
+}
+
+async function loadAll(){
+  const sid=$('sheetId').value.trim();
+  if(!sid){alert('Ingresa el ID de tu Google Spreadsheet');return;}
+  $('loadBtn').textContent='Cargando...';
+  const [ed,ad,ee,ae]=await Promise.all([
+    fetchTab(sid,'DATOS_ESPIDF'),
+    fetchTab(sid,'DATOS_ARDUINO'),
+    fetchTab(sid,'ESTADO_ESPIDF'),
+    fetchTab(sid,'ESTADO_ARDUINO')
+  ]);
+  espDatos=ed;ardDatos=ad;espEstado=ee;ardEstado=ae;
+  $('count-esp-d').textContent=ed.length;
+  $('count-esp-e').textContent=ee.length;
+  $('count-ard-d').textContent=ad.length;
+  $('count-ard-e').textContent=ae.length;
+  $('live-empty').style.display=(ed.length||ad.length)?'none':'block';
+  updateLive();updateCharts();updateMetrics();updateTel();
+  $('loadBtn').textContent='🔄 Cargar datos';
+}
+
+const pF=v=>v?parseFloat(v.replace(',','.')):NaN;
+const last=arr=>arr.length?arr[arr.length-1]:null;
+
+function updateLive(){
+  const le=last(espDatos),la=last(ardDatos);
+  if(le){
+    const t=pF(le[2]),sp=pF(le[1]),fan=pF(le[3]),heat=parseInt(le[4]||0);
+    $('k-temp-esp').textContent=isNaN(t)?'—':t.toFixed(1);
+    $('k-sp-esp').textContent=isNaN(sp)?'—':sp.toFixed(0);
+    const sh=$('s-heat-esp');sh.textContent=heat?'ON':'OFF';sh.className='pill '+(heat?'heat':'off');
+    const sf=$('s-fan-esp');sf.textContent=fan>0?fan.toFixed(0)+'%':'OFF';sf.className='pill '+(fan>0?'on':'off');
+    $('s-dim-esp').textContent=heat?'Activo':'Apagado';
+    $('s-err-esp').textContent=(!isNaN(t)&&!isNaN(sp))?(t-sp).toFixed(2)+' °C':'—';
+    $('s-ts-esp').textContent=le[0]||'—';
+  }
+  if(la){
+    const t=pF(la[2]),sp=pF(la[1]),fan=pF(la[3]),heat=parseInt(la[4]||0);
+    $('k-temp-ard').textContent=isNaN(t)?'—':t.toFixed(1);
+    $('k-sp-ard').textContent=isNaN(sp)?'—':sp.toFixed(0);
+    const sh=$('s-heat-ard');sh.textContent=heat?'ON':'OFF';sh.className='pill '+(heat?'heat':'off');
+    const sf=$('s-fan-ard');sf.textContent=fan>0?'ON':'OFF';sf.className='pill '+(fan>0?'on':'off');
+    $('s-dim-ard').textContent='ON/OFF + histéresis';
+    $('s-err-ard').textContent=(!isNaN(t)&&!isNaN(sp))?(t-sp).toFixed(2)+' °C':'—';
+    $('s-ts-ard').textContent=la[0]||'—';
+  }
+}
+
+function buildTempChart(){
+  const MAX=60;
+  const eR=espDatos.slice(-MAX),aR=ardDatos.slice(-MAX);
+  const eL=eR.map(r=>r[0]?r[0].split(' ')[1]||r[0]:'');
+  const aL=aR.map(r=>r[0]?r[0].split(' ')[1]||r[0]:'');
+  const labels=eL.length>=aL.length?eL:aL;
+  const eT=eR.map(r=>pF(r[2]));
+  const aT=aR.map(r=>pF(r[2]));
+  const ctx=$('chartTemp');
+  if(chartTemp)chartTemp.destroy();
+  chartTemp=new Chart(ctx,{
+    type:'line',
+    data:{labels,datasets:[
+      {label:'ESP-IDF',data:eT,borderColor:'#2a78d6',backgroundColor:'rgba(42,120,214,0.08)',borderWidth:2,pointRadius:0,tension:0.3},
+      {label:'Arduino',data:aT,borderColor:'#d95926',backgroundColor:'rgba(217,89,38,0.08)',borderWidth:2,pointRadius:0,tension:0.3}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#999',font:{size:10},maxTicksLimit:8},grid:{display:false}},
+        y:{ticks:{color:'#999',font:{size:10}},grid:{color:'#eee'}}
+      }
+    }
+  });
+}
+
+function buildFanChart(){
+  const MAX=60;
+  const eR=espDatos.slice(-MAX),aR=ardDatos.slice(-MAX);
+  const eF=eR.map(r=>pF(r[3]));
+  const aF=aR.map(r=>pF(r[3]));
+  const labels=eR.map(r=>r[0]?r[0].split(' ')[1]||r[0]:'');
+  const ctx=$('chartFan');
+  if(chartFan)chartFan.destroy();
+  chartFan=new Chart(ctx,{
+    type:'line',
+    data:{labels,datasets:[
+      {label:'Fan ESP-IDF',data:eF,borderColor:'#2a78d6',backgroundColor:'rgba(42,120,214,0.08)',borderWidth:2,pointRadius:0,stepped:true},
+      {label:'Fan Arduino',data:aF,borderColor:'#d95926',backgroundColor:'rgba(217,89,38,0.08)',borderWidth:2,pointRadius:0,stepped:true}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#999',font:{size:10},maxTicksLimit:8},grid:{display:false}},
+        y:{ticks:{color:'#999',font:{size:10}},grid:{color:'#eee'},min:0}
+      }
+    }
+  });
+}
+
+function updateCharts(){
+  if(espDatos.length||ardDatos.length){buildTempChart();buildFanChart();}
+}
+
+function avg(rows,col){
+  const v=rows.map(r=>pF(r[col])).filter(v=>!isNaN(v));
+  return v.length?v.reduce((a,b)=>a+b,0)/v.length:NaN;
+}
+function mae(rows,col,sp){
+  const v=rows.map(r=>pF(r[col])).filter(v=>!isNaN(v));
+  return v.length?v.reduce((a,b)=>a+Math.abs(b-sp),0)/v.length:NaN;
+}
+function std(rows,col){
+  const v=rows.map(r=>pF(r[col])).filter(v=>!isNaN(v));
+  if(!v.length)return NaN;
+  const m=v.reduce((a,b)=>a+b,0)/v.length;
+  return Math.sqrt(v.reduce((a,b)=>a+(b-m)**2,0)/v.length);
+}
+
+function updateMetrics(){
+  const sp=parseFloat($('spRef').value)||37;
+  const metrics=[
+    {label:'MAE temperatura (°C)',e:mae(espDatos,2,sp),a:mae(ardDatos,2,sp),lower:true,fmt:v=>v.toFixed(3)},
+    {label:'Desv. estándar temp (°C)',e:std(espDatos,2),a:std(ardDatos,2),lower:true,fmt:v=>v.toFixed(3)},
+    {label:'Temperatura promedio (°C)',e:avg(espDatos,2),a:avg(ardDatos,2),lower:false,fmt:v=>v.toFixed(2)},
+    {label:'Fan promedio (%)',e:avg(espDatos,3),a:avg(ardDatos,3),lower:false,fmt:v=>v.toFixed(1)},
+    {label:'Total filas registradas',e:espDatos.length,a:ardDatos.length,lower:false,fmt:v=>v.toFixed(0)},
+  ];
+  const tb=$('metricsBody');
+  if(!espDatos.length&&!ardDatos.length){
+    tb.innerHTML='<tr><td colspan="4" class="empty">Carga datos primero</td></tr>';return;
+  }
+  tb.innerHTML=metrics.map(m=>{
+    const eOk=!isNaN(m.e),aOk=!isNaN(m.a);
+    const eBetter=eOk&&aOk&&(m.lower?m.e<m.a:m.e>m.a);
+    const aBetter=eOk&&aOk&&(m.lower?m.a<m.e:m.a>m.e);
+    return `<tr>
+      <td>${m.label}</td>
+      <td class="${eBetter?'better':''}">${eOk?m.fmt(m.e):'—'}</td>
+      <td class="${aBetter?'better':''}">${aOk?m.fmt(m.a):'—'}</td>
+      <td>${eBetter?'<span class="badge esp">ESP-IDF</span>':aBetter?'<span class="badge ard">Arduino</span>':'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function updateTel(){
+  const le=last(espEstado),la=last(ardEstado);
+  const tb=$('telBody');
+  if(!le&&!la){tb.innerHTML='<tr><td colspan="3" class="empty">Sin datos de telemetría</td></tr>';return;}
+  const params=[
+    {label:'Heap libre (bytes)',i:2},
+    {label:'Heap usado (bytes)',i:3},
+    {label:'RSSI (dBm)',i:4},
+    {label:'Latencia envío (s)',i:6},
+    {label:'Watchdog',i:7},
+    {label:'IP',i:8},
+    {label:'MAC',i:9},
+  ];
+  tb.innerHTML=params.map(p=>`<tr>
+    <td>${p.label}</td>
+    <td>${le?le[p.i]||'—':'—'}</td>
+    <td>${la?la[p.i]||'—':'—'}</td>
+  </tr>`).join('');
+}
+
+$('loadBtn').addEventListener('click',loadAll);
+$('calcBtn').addEventListener('click',updateMetrics);
+$('autoInt').addEventListener('change',()=>{
+  if(autoTimer)clearInterval(autoTimer);
+  const v=parseInt($('autoInt').value);
+  if(v>0){
+    autoTimer=setInterval(loadAll,v);
+    $('autoStatus').textContent=`Auto: activo (${v/1000} s)`;
+  }else{
+    $('autoStatus').textContent='Auto: desactivado';
+  }
+});
+
+autoTimer=setInterval(loadAll,10000);
+loadAll();
+</script>
+</body>
+</html>
